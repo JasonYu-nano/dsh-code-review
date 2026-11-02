@@ -1,0 +1,1 @@
+{ "meta": { "title": "Code Review", "description": "Adds a Review button to the composer: an independent agent with no memory of this session reviews the files the session changed, grades findings P0-P3, and returns them to the session, where you choose fix or skip and write a fix suggestion for each finding." } }
