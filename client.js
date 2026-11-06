@@ -37,6 +37,7 @@ window.__ModuleLoader__.load({
       'panel.redeliver': '重新发送',
       'error.request': '请求失败：{error}',
       'settings.title': '审核设置',
+      'settings.nav': '代码审核',
       'settings.model': '审核模型',
       'settings.modelHint': '选择「默认」时，使用发起审核的当前会话的模型。',
       'settings.modelDefault': '默认（使用当前会话的模型）',
@@ -48,7 +49,7 @@ window.__ModuleLoader__.load({
       'settings.retry': '重试',
       'settings.prompt': '附加提示词',
       'settings.promptHint': '会附加到内置审核提示词的末尾，例如项目约定或需要重点关注的问题。留空则不附加。',
-      'settings.promptPlaceholder': '例如：重点检查 UE 对象生命周期和 Lua 事件解绑；注释使用中文。',
+      'settings.promptPlaceholder': '例如：重点检查空指针和资源释放；忽略纯格式问题。',
       'settings.save': '保存',
       'settings.discard': '放弃修改',
       'settings.saving': '保存中…',
@@ -87,6 +88,7 @@ window.__ModuleLoader__.load({
       'panel.redeliver': 'Resend',
       'error.request': 'Request failed: {error}',
       'settings.title': 'Review settings',
+      'settings.nav': 'Code Review',
       'settings.model': 'Review model',
       'settings.modelHint': 'With "Default", the review uses the model of the session that starts it.',
       'settings.modelDefault': 'Default (use the current session\'s model)',
@@ -98,7 +100,7 @@ window.__ModuleLoader__.load({
       'settings.retry': 'Retry',
       'settings.prompt': 'Additional prompt',
       'settings.promptHint': 'Appended to the end of the built-in review prompt, e.g. project conventions or issues to focus on. Leave empty to add nothing.',
-      'settings.promptPlaceholder': 'e.g. Focus on UE object lifetimes and Lua event unbinding.',
+      'settings.promptPlaceholder': 'e.g. Focus on null checks and resource cleanup; ignore pure formatting issues.',
       'settings.save': 'Save',
       'settings.discard': 'Discard',
       'settings.saving': 'Saving…',
@@ -493,7 +495,7 @@ window.__ModuleLoader__.load({
       return useSyncExternalStore((listener) => scope.subscribe(listener), () => scope.getSnapshot());
     }
 
-    function SettingsPage({ t, scope, loadCatalog }) {
+    function SettingsPage({ t, scope, loadCatalog, showTitle }) {
       const snapshot = useScope(scope);
       const stored = currentSettings(scope);
       const [draft, setDraft] = useState(null);
@@ -586,7 +588,7 @@ window.__ModuleLoader__.load({
       else statusLine = h('span', { className: 'dcr-status' });
 
       return h('div', { className: 'dcr-set' }, h(StyleTag),
-        h('h3', null, t('settings.title')),
+        showTitle ? h('h3', null, t('settings.title')) : null,
         h('div', { className: 'dcr-field' },
           h('label', { className: 'dcr-label', htmlFor: 'dcr-model' }, t('settings.model')),
           h('div', { className: 'dcr-row2' },
@@ -656,19 +658,29 @@ window.__ModuleLoader__.load({
           inject: (sessionId) => ({ sessionId, t }),
         }, ReviewDock));
 
-        // The settings page renders on this bundle's page in the Plugins panel.
+        // The same settings form appears in two places: the Settings dialog's
+        // left navigation and this bundle's page in the Plugins panel.
         const scope = ctx.configForms.get(SETTINGS_NS);
         const loadCatalog = async () => {
           const response = await ctx.remote.session.modelCatalog();
           if (!response?.ok) throw new Error('model catalog unavailable');
           return response.value.groups ?? [];
         };
+        const settingsProps = (showTitle) => () => ({ t, scope, loadCatalog, showTitle });
+        ctx.effect(() => ctx.configForms.whileServed([SETTINGS_NS], () => ctx.slots.inject('settings.section', () => ctx.slots.register({
+          name: 'settings.section',
+          id: 'dsh-code-review',
+          order: 56,
+          label: () => t('settings.nav'),
+          locale: NS,
+          inject: settingsProps(false),
+        }, SettingsPage))), 'dsh-code-review: settings dialog section');
         ctx.effect(() => ctx.configForms.whileServed([SETTINGS_NS], () => ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
           name: 'plugins.bundle.config',
           key: SETTINGS_NS,
           locale: NS,
-          inject: () => ({ t, scope, loadCatalog }),
-        }, SettingsPage))), 'dsh-code-review: settings page');
+          inject: settingsProps(true),
+        }, SettingsPage))), 'dsh-code-review: plugin page settings');
       },
     };
   },
