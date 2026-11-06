@@ -42,30 +42,37 @@ const SHELL_TOOLS = ['pwsh', 'bash']
 const DEFAULTS = {
   allowShell: false,
   provider: 'spawn',
-  model: undefined,
-  modelProvider: undefined,
-  reasoningEffort: undefined,
   timeoutMs: 30 * 60 * 1000,
   maxDiffChars: 80000,
   maxFiles: 200,
 }
+/** Upper bound on the user's extra review instructions. */
+const MAX_EXTRA_PROMPT = 8000
 
 /**
- * Plugin configuration, validated by the Loader at activation and rendered by
- * the plugin settings page. `resolveConfig` below re-checks every value so a
- * host without schema validation still gets safe numbers.
+ * Plugin configuration, validated by the Loader at activation. `reviewModel`
+ * and `extraPrompt` are volatile: the plugin page edits them live and each
+ * review reads their current value, so no remount is needed. `resolveConfig`
+ * below re-checks every value so a host without schema validation still gets
+ * safe numbers.
  */
 export const Config = z.object({
+  reviewModel: z.object({
+    provider: z.string().description('模型提供方 id。'),
+    model: z.string().description('模型 id。'),
+    reasoningEffort: z.string().description('推理强度 id；留空使用该模型的默认强度。'),
+  }).default({}).volatile()
+    .description('审核所用的模型。留空（默认）使用发起审核的当前会话的模型。'),
+  extraPrompt: z.string().role('textarea').default('').volatile()
+    .description(`附加到内置审核提示词末尾的额外要求，最多 ${MAX_EXTRA_PROMPT} 字。`),
   provider: z.string().default(DEFAULTS.provider)
     .description('审核所用的 subagent 提供方。必须是不继承父会话上下文的提供方（如 spawn）；会继承上下文的提供方（如 fork）会被拒绝。'),
   allowShell: z.boolean().default(false)
     .description('允许审核 agent 使用 pwsh / bash。Shell 可以修改文件，开启后只读保证只剩 prompt 约束。'),
-  modelProvider: z.string()
-    .description('审核 agent 的模型提供方；留空沿用原会话。'),
-  model: z.string()
-    .description('审核 agent 的模型 id；留空沿用原会话。'),
-  reasoningEffort: z.union(['off', 'low', 'medium', 'high', 'xhigh', 'max'])
-    .description('审核 agent 的推理强度；留空沿用原会话。'),
+  // Pre-0.3 fields, still honoured when `reviewModel` is empty.
+  modelProvider: z.string().hidden(),
+  model: z.string().hidden(),
+  reasoningEffort: z.string().hidden(),
   timeoutMs: z.natural().min(60000).max(2147483647).default(DEFAULTS.timeoutMs)
     .description('单次审核的超时（毫秒），超时后取消审核。'),
   maxDiffChars: z.natural().min(1000).max(2000000).default(DEFAULTS.maxDiffChars)
@@ -227,19 +234,46 @@ function positiveInt(value, fallback, max) {
   return Number.isInteger(number) && number > 0 ? Math.min(number, max) : fallback
 }
 
+const nonEmpty = value => (typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined)
+
+/** Read a volatile Config field: a `{ get() }` reference under the Loader, a plain value elsewhere. */
+function live(value) {
+  return value !== null && typeof value === 'object' && typeof value.get === 'function' ? value.get() : value
+}
+
 function resolveConfig(raw) {
   const input = raw !== null && typeof raw === 'object' ? raw : {}
-  const text = value => (typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined)
   return {
     allowShell: input.allowShell === true,
-    provider: text(input.provider) ?? DEFAULTS.provider,
-    model: text(input.model),
-    modelProvider: text(input.modelProvider),
-    reasoningEffort: text(input.reasoningEffort),
+    provider: nonEmpty(input.provider) ?? DEFAULTS.provider,
     timeoutMs: positiveInt(input.timeoutMs, DEFAULTS.timeoutMs, 2147483647),
     maxDiffChars: positiveInt(input.maxDiffChars, DEFAULTS.maxDiffChars, 2000000),
     maxFiles: positiveInt(input.maxFiles, DEFAULTS.maxFiles, 5000),
   }
+}
+
+/**
+ * The reviewer's model override, or undefined to keep the calling session's
+ * model. A model id alone keeps the session's provider; an empty reviewModel
+ * falls back to the pre-0.3 top-level fields.
+ */
+function reviewAgentOptions(raw) {
+  const input = raw !== null && typeof raw === 'object' ? raw : {}
+  const chosen = live(input.reviewModel)
+  const route = chosen !== null && typeof chosen === 'object' && nonEmpty(chosen.model) !== undefined
+    ? chosen
+    : { provider: input.modelProvider, model: input.model, reasoningEffort: input.reasoningEffort }
+  const options = {
+    ...(nonEmpty(route.provider) !== undefined ? { provider: nonEmpty(route.provider) } : {}),
+    ...(nonEmpty(route.model) !== undefined ? { model: nonEmpty(route.model) } : {}),
+    ...(nonEmpty(route.reasoningEffort) !== undefined ? { reasoningEffort: nonEmpty(route.reasoningEffort) } : {}),
+  }
+  return Object.keys(options).length > 0 ? options : undefined
+}
+
+function reviewExtraPrompt(raw) {
+  const text = live(raw?.extraPrompt)
+  return typeof text === 'string' ? text.trim().slice(0, MAX_EXTRA_PROMPT) : ''
 }
 
 export function apply(ctx, rawConfig) {
@@ -386,9 +420,9 @@ export function apply(ctx, rawConfig) {
     return { cwd, files: list, total: files.size, diffText, truncated }
   }
 
-  function reviewPrompt(changes) {
+  function reviewPrompt(changes, extraPrompt) {
     const tools = [...allowedTools].filter(tool => tool !== 'structured_output').join(', ')
-    return [
+    const lines = [
       '你是一名资深代码审核员。你在一个全新、独立的会话中工作，不了解这些修改的来龙去脉，只能依据代码本身做判断。',
       `工作目录：${changes.cwd}`,
       '',
@@ -409,7 +443,16 @@ export function apply(ctx, rawConfig) {
       '   - P3：代码风格、命名、注释、小的改进建议。',
       '4. 每个问题给出文件、行号、问题描述（是什么、为什么、如何触发）和具体修复建议。使用中文。',
       '5. 完成后调用 structured_output 工具提交结果；没有问题时 findings 为空数组。',
-    ].join('\n')
+    ]
+    if (extraPrompt.length > 0) {
+      // The user's additions never relax the read-only rule or the output format above.
+      lines.push(
+        '',
+        '用户附加的审核要求（在不违反上面只读限制和提交格式的前提下执行）：',
+        extraPrompt,
+      )
+    }
+    return lines.join('\n')
   }
 
   function reportText(record) {
@@ -481,6 +524,7 @@ export function apply(ctx, rawConfig) {
       files: record.files,
       totalFiles: record.totalFiles,
       childId: record.childId,
+      model: record.model ?? null,
       summary: record.summary,
       findings: record.findings,
       error: record.error,
@@ -563,18 +607,16 @@ export function apply(ctx, rawConfig) {
     record.files = changes.files
     record.totalFiles = changes.total
     reviewChildren.add(record.childId)
+    // Volatile settings: read at review start so a plugin-page edit applies to the next review.
+    const agentOptions = reviewAgentOptions(rawConfig)
+    record.model = agentOptions === undefined ? null : agentOptions
     const request = {
       parent,
-      prompt: [{ type: 'text', text: reviewPrompt(changes) }],
+      prompt: [{ type: 'text', text: reviewPrompt(changes, reviewExtraPrompt(rawConfig)) }],
       outputSchema: OUTPUT_SCHEMA,
       cwd: changes.cwd,
     }
-    const agentOptions = {
-      ...(config.modelProvider !== undefined ? { provider: config.modelProvider } : {}),
-      ...(config.model !== undefined ? { model: config.model } : {}),
-      ...(config.reasoningEffort !== undefined ? { reasoningEffort: config.reasoningEffort } : {}),
-    }
-    if (Object.keys(agentOptions).length > 0) request.agentOptions = agentOptions
+    if (agentOptions !== undefined) request.agentOptions = agentOptions
     let run
     try {
       run = await subagents.startActivation({

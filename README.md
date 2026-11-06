@@ -23,18 +23,28 @@ pnpm install --ignore-workspace
 
 然后在 Harness 中把该目录作为 bundle 安装（插件管理页，或让 agent 用 `plugin_manager` 的 `install_bundle`，目标为该目录的绝对路径）。刷新页面后输入框工具栏会出现「审核」按钮。
 
+## 设置
+
+在侧栏打开 **插件**，进入 **dsh-code-review** 的组合包页面，「审核设置」里有两项，保存后从下一次审核开始生效，不需要重启：
+
+- **审核模型**：下拉列出当前可用的全部模型，可同时选择推理强度。选择「默认」时，使用发起审核的当前会话的模型。
+- **附加提示词**：附加到内置审核提示词末尾的额外要求（最多 8000 字），例如项目约定或需要重点关注的问题。它不能放宽只读限制和结果格式。
+
 ## 配置
 
-在 profile 的 `cordis.patch.yml` 中覆盖 `dsh-code-review` 条目的 `config`，或在插件设置页修改：
+也可以在 profile 的 `cordis.patch.yml` 中覆盖 `dsh-code-review` 条目的 `config`：
 
 | 字段 | 默认值 | 说明 |
 |---|---|---|
+| `reviewModel` | `{}` | 审核模型 `{ provider, model, reasoningEffort }`，空对象表示使用当前会话的模型（设置页可编辑） |
+| `extraPrompt` | `''` | 附加提示词（设置页可编辑） |
 | `provider` | `spawn` | 审核所用的 subagent 提供方，必须不继承父会话上下文 |
 | `allowShell` | `false` | 允许审核 agent 使用 `pwsh` / `bash`（Shell 可以修改文件） |
-| `modelProvider` / `model` / `reasoningEffort` | 空 | 审核 agent 的模型设置，留空沿用原会话 |
 | `timeoutMs` | `1800000` | 单次审核超时（60 000 – 2 147 483 647 毫秒） |
 | `maxDiffChars` | `80000` | 附带给审核 agent 的 diff 最大字符数 |
 | `maxFiles` | `200` | 单次审核列出的最大文件数 |
+
+0.2.x 的顶层 `modelProvider` / `model` / `reasoningEffort` 仍然兼容，仅在 `reviewModel` 为空时使用。
 
 ## 安全
 

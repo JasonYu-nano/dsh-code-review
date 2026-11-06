@@ -36,6 +36,28 @@ window.__ModuleLoader__.load({
       'panel.notDelivered': '结果未能送回原会话：{error}',
       'panel.redeliver': '重新发送',
       'error.request': '请求失败：{error}',
+      'settings.title': '审核设置',
+      'settings.model': '审核模型',
+      'settings.modelHint': '选择「默认」时，使用发起审核的当前会话的模型。',
+      'settings.modelDefault': '默认（使用当前会话的模型）',
+      'settings.modelUnavailable': '{route}（已保存，当前不可用）',
+      'settings.effort': '推理强度',
+      'settings.effortDefault': '模型默认',
+      'settings.catalogLoading': '正在读取模型列表…',
+      'settings.catalogError': '无法读取模型列表',
+      'settings.retry': '重试',
+      'settings.prompt': '附加提示词',
+      'settings.promptHint': '会附加到内置审核提示词的末尾，例如项目约定或需要重点关注的问题。留空则不附加。',
+      'settings.promptPlaceholder': '例如：重点检查 UE 对象生命周期和 Lua 事件解绑；注释使用中文。',
+      'settings.save': '保存',
+      'settings.discard': '放弃修改',
+      'settings.saving': '保存中…',
+      'settings.saved': '已保存，下一次审核生效',
+      'settings.saveFailed': '保存失败，请重试',
+      'settings.conflict': '设置已在别处被修改，请放弃修改后重新编辑',
+      'settings.readonly': '当前设置不可写（被更高优先级的配置覆盖）',
+      'settings.unavailable': '设置暂不可用：请确认插件已启用',
+      'settings.tooLong': '提示词超出 {max} 字上限',
     };
     const en = {
       'button.label': 'Review',
@@ -64,6 +86,28 @@ window.__ModuleLoader__.load({
       'panel.notDelivered': 'Result was not delivered to the session: {error}',
       'panel.redeliver': 'Resend',
       'error.request': 'Request failed: {error}',
+      'settings.title': 'Review settings',
+      'settings.model': 'Review model',
+      'settings.modelHint': 'With "Default", the review uses the model of the session that starts it.',
+      'settings.modelDefault': 'Default (use the current session\'s model)',
+      'settings.modelUnavailable': '{route} (saved, currently unavailable)',
+      'settings.effort': 'Reasoning effort',
+      'settings.effortDefault': 'Model default',
+      'settings.catalogLoading': 'Loading models…',
+      'settings.catalogError': 'Could not load the model list',
+      'settings.retry': 'Retry',
+      'settings.prompt': 'Additional prompt',
+      'settings.promptHint': 'Appended to the end of the built-in review prompt, e.g. project conventions or issues to focus on. Leave empty to add nothing.',
+      'settings.promptPlaceholder': 'e.g. Focus on UE object lifetimes and Lua event unbinding.',
+      'settings.save': 'Save',
+      'settings.discard': 'Discard',
+      'settings.saving': 'Saving…',
+      'settings.saved': 'Saved; applies to the next review',
+      'settings.saveFailed': 'Save failed, please retry',
+      'settings.conflict': 'Settings changed elsewhere; discard and edit again',
+      'settings.readonly': 'Settings are not writable (overridden by a higher-priority layer)',
+      'settings.unavailable': 'Settings unavailable: make sure the plugin is enabled',
+      'settings.tooLong': 'The prompt exceeds {max} characters',
     };
 
     const CSS = `
@@ -109,6 +153,23 @@ window.__ModuleLoader__.load({
 .dcr-foot{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 12px;border-top:.5px solid var(--dsw-alias-border-l1)}
 .dcr-primary{box-sizing:border-box;height:28px;padding:0 12px;border:none;border-radius:8px;background:var(--dsw-alias-brand-primary);color:#fff;font:inherit;font-size:13px;cursor:pointer}
 .dcr-primary:disabled{opacity:.6;cursor:default}
+.dcr-set{display:grid;gap:16px;min-width:0;padding:4px 0 8px;color:var(--dsw-alias-label-primary);font-size:13px;line-height:1.5}
+.dcr-set h3{margin:0;font-size:13px;font-weight:600}
+.dcr-field{display:grid;gap:6px;min-width:0}
+.dcr-label{font-weight:500}
+.dcr-help{margin:0;color:var(--dsw-alias-label-secondary);font-size:12px}
+.dcr-row2{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:12px}
+.dcr-select,.dcr-textarea{box-sizing:border-box;width:100%;min-width:0;border:.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm,8px);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font:inherit;font-size:13px}
+.dcr-select{height:32px;padding:0 8px}
+.dcr-textarea{min-height:120px;resize:vertical;padding:8px 10px;line-height:1.5}
+.dcr-select:focus,.dcr-textarea:focus{outline:none;border-color:var(--dsw-alias-brand-primary)}
+.dcr-select:disabled,.dcr-textarea:disabled{opacity:.6}
+.dcr-count2{justify-self:end;color:var(--dsw-alias-label-secondary);font-size:11px;font-variant-numeric:tabular-nums}
+.dcr-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px}
+.dcr-status{flex:1;min-width:0;color:var(--dsw-alias-label-secondary);font-size:12px}
+.dcr-status.dcr-bad{color:var(--dsw-alias-state-error-primary)}
+.dcr-status.dcr-good{color:var(--dsw-alias-state-success-primary)}
+.dcr-link{border:0;background:none;padding:0;color:var(--dsw-alias-brand-primary);font:inherit;font-size:12px;cursor:pointer}
 `;
 
     function StyleTag() {
@@ -406,9 +467,159 @@ window.__ModuleLoader__.load({
             h('button', { type: 'button', className: 'dcr-primary', disabled: locked, onClick: submit }, snapshot.busy ? t('panel.submitting') : t('panel.submit')))));
     }
 
+    // ------------------------------------------------------------ settings page
+
+    /** Settings namespace = the patch entry id; also the bundle's package name. */
+    const SETTINGS_NS = 'dsh-code-review';
+    const MAX_EXTRA_PROMPT = 8000;
+    const routeKey = (provider, model) => `${provider}\u0000${model}`;
+
+    function currentSettings(scope) {
+      const value = scope.getSnapshot().value ?? {};
+      const route = value.reviewModel ?? {};
+      return {
+        provider: typeof route.provider === 'string' ? route.provider : '',
+        model: typeof route.model === 'string' ? route.model : '',
+        reasoningEffort: typeof route.reasoningEffort === 'string' ? route.reasoningEffort : '',
+        extraPrompt: typeof value.extraPrompt === 'string' ? value.extraPrompt : '',
+      };
+    }
+
+    function sameSettings(a, b) {
+      return a.provider === b.provider && a.model === b.model && a.reasoningEffort === b.reasoningEffort && a.extraPrompt === b.extraPrompt;
+    }
+
+    function useScope(scope) {
+      return useSyncExternalStore((listener) => scope.subscribe(listener), () => scope.getSnapshot());
+    }
+
+    function SettingsPage({ t, scope, loadCatalog }) {
+      const snapshot = useScope(scope);
+      const stored = currentSettings(scope);
+      const [draft, setDraft] = useState(null);
+      const [draftRevision, setDraftRevision] = useState(undefined);
+      const [status, setStatus] = useState({ kind: 'idle' });
+      const [catalog, setCatalog] = useState({ kind: 'loading', groups: [] });
+      const mounted = useRef(true);
+      useEffect(() => () => { mounted.current = false; }, []);
+
+      const reload = () => {
+        setCatalog(c => ({ kind: 'loading', groups: c.groups }));
+        loadCatalog().then((groups) => {
+          if (mounted.current) setCatalog({ kind: 'ready', groups });
+        }, () => {
+          if (mounted.current) setCatalog(c => ({ kind: 'error', groups: c.groups }));
+        });
+      };
+      useEffect(() => { reload(); }, []);
+
+      if (snapshot.status !== 'ready') {
+        return h('div', { className: 'dcr-set' }, h(StyleTag),
+          h('p', { className: 'dcr-help' }, snapshot.status === 'loading' ? t('settings.catalogLoading') : t('settings.unavailable')));
+      }
+
+      const value = draft ?? stored;
+      const dirty = !sameSettings(value, stored);
+      const conflicted = draft !== null && draftRevision !== snapshot.revision && dirty;
+      const tooLong = value.extraPrompt.trim().length > MAX_EXTRA_PROMPT;
+      const saving = status.kind === 'saving';
+      const locked = !snapshot.writable || saving;
+      const edit = (patch) => {
+        if (draft === null) setDraftRevision(snapshot.revision);
+        setDraft({ ...value, ...patch });
+        setStatus({ kind: 'idle' });
+      };
+
+      // Options: live catalog, plus the saved route when the catalog no longer offers it.
+      const selectedKey = value.model.length > 0 ? routeKey(value.provider, value.model) : '';
+      const groups = catalog.groups;
+      const known = new Map();
+      for (const group of groups) for (const model of group.models) known.set(routeKey(group.id, model.id), { group, model });
+      const selected = known.get(selectedKey);
+      const modelOptions = [h('option', { key: 'default', value: '' }, t('settings.modelDefault'))];
+      for (const group of groups) {
+        modelOptions.push(h('optgroup', { key: `g-${group.id}`, label: group.name || group.id },
+          group.models.map(model => h('option', { key: model.id, value: routeKey(group.id, model.id) }, model.name || model.id))));
+      }
+      if (selectedKey.length > 0 && selected === undefined) {
+        const label = value.provider.length > 0 ? `${value.provider}/${value.model}` : value.model;
+        modelOptions.push(h('option', { key: 'missing', value: selectedKey }, format(t('settings.modelUnavailable'), { route: label })));
+      }
+      const efforts = selected?.model.reasoning?.efforts ?? [];
+
+      const onModel = (event) => {
+        const key = event.target.value;
+        if (key === '') { edit({ provider: '', model: '', reasoningEffort: '' }); return; }
+        const hit = known.get(key);
+        if (hit === undefined) return;
+        const keepEffort = (hit.model.reasoning?.efforts ?? []).some(e => e.id === value.reasoningEffort);
+        edit({ provider: hit.group.id, model: hit.model.id, reasoningEffort: keepEffort ? value.reasoningEffort : '' });
+      };
+
+      const save = async () => {
+        if (!dirty || conflicted || tooLong || locked) return;
+        setStatus({ kind: 'saving' });
+        const route = value.model.length > 0
+          ? { provider: value.provider, model: value.model, ...(value.reasoningEffort ? { reasoningEffort: value.reasoningEffort } : {}) }
+          : {};
+        const ok = await scope.mutate([
+          { op: 'set', path: ['reviewModel'], value: route },
+          { op: 'set', path: ['extraPrompt'], value: value.extraPrompt.trim() },
+        ], draftRevision);
+        if (!mounted.current) return;
+        if (ok) {
+          setDraft(null);
+          setDraftRevision(undefined);
+          setStatus({ kind: 'saved' });
+        } else {
+          setStatus({ kind: 'failed' });
+        }
+      };
+      const discard = () => { setDraft(null); setDraftRevision(undefined); setStatus({ kind: 'idle' }); };
+
+      let statusLine = null;
+      if (!snapshot.writable) statusLine = h('span', { className: 'dcr-status dcr-bad' }, t('settings.readonly'));
+      else if (conflicted) statusLine = h('span', { className: 'dcr-status dcr-bad' }, t('settings.conflict'));
+      else if (tooLong) statusLine = h('span', { className: 'dcr-status dcr-bad' }, format(t('settings.tooLong'), { max: MAX_EXTRA_PROMPT }));
+      else if (status.kind === 'failed') statusLine = h('span', { className: 'dcr-status dcr-bad' }, t('settings.saveFailed'));
+      else if (status.kind === 'saved') statusLine = h('span', { className: 'dcr-status dcr-good' }, t('settings.saved'));
+      else statusLine = h('span', { className: 'dcr-status' });
+
+      return h('div', { className: 'dcr-set' }, h(StyleTag),
+        h('h3', null, t('settings.title')),
+        h('div', { className: 'dcr-field' },
+          h('label', { className: 'dcr-label', htmlFor: 'dcr-model' }, t('settings.model')),
+          h('div', { className: 'dcr-row2' },
+            h('select', { id: 'dcr-model', className: 'dcr-select', value: selectedKey, disabled: locked, onChange: onModel }, modelOptions),
+            h('select', {
+              className: 'dcr-select', 'aria-label': t('settings.effort'), value: value.reasoningEffort,
+              disabled: locked || selectedKey === '' || efforts.length === 0,
+              onChange: event => edit({ reasoningEffort: event.target.value }),
+            }, [h('option', { key: 'd', value: '' }, `${t('settings.effort')}：${t('settings.effortDefault')}`),
+              ...efforts.map(e => h('option', { key: e.id, value: e.id }, `${t('settings.effort')}：${e.name || e.id}`))])),
+          h('p', { className: 'dcr-help' }, t('settings.modelHint'),
+            catalog.kind === 'loading' ? ` ${t('settings.catalogLoading')}` : null,
+            catalog.kind === 'error' ? h(React.Fragment, null, ` ${t('settings.catalogError')} `,
+              h('button', { type: 'button', className: 'dcr-link', onClick: reload }, t('settings.retry'))) : null)),
+        h('div', { className: 'dcr-field' },
+          h('label', { className: 'dcr-label', htmlFor: 'dcr-prompt' }, t('settings.prompt')),
+          h('textarea', {
+            id: 'dcr-prompt', className: 'dcr-textarea', value: value.extraPrompt, disabled: locked,
+            placeholder: t('settings.promptPlaceholder'),
+            onChange: event => edit({ extraPrompt: event.target.value }),
+          }),
+          h('span', { className: 'dcr-count2' }, `${value.extraPrompt.trim().length} / ${MAX_EXTRA_PROMPT}`),
+          h('p', { className: 'dcr-help' }, t('settings.promptHint'))),
+        h('div', { className: 'dcr-actions' },
+          statusLine,
+          h('button', { type: 'button', className: 'dcr-btn', disabled: !dirty || saving, onClick: discard }, t('settings.discard')),
+          h('button', { type: 'button', className: 'dcr-primary', disabled: !dirty || conflicted || tooLong || locked, onClick: () => { void save(); } },
+            saving ? t('settings.saving') : t('settings.save'))));
+    }
+
     return {
       name: 'dsh-code-review',
-      inject: ['slots', 'locale'],
+      inject: ['slots', 'locale', 'remote', 'remote.session', 'configForms'],
       apply(ctx) {
         disposed = false;
         ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-code-review: dictionaries');
@@ -444,6 +655,20 @@ window.__ModuleLoader__.load({
           locale: NS,
           inject: (sessionId) => ({ sessionId, t }),
         }, ReviewDock));
+
+        // The settings page renders on this bundle's page in the Plugins panel.
+        const scope = ctx.configForms.get(SETTINGS_NS);
+        const loadCatalog = async () => {
+          const response = await ctx.remote.session.modelCatalog();
+          if (!response?.ok) throw new Error('model catalog unavailable');
+          return response.value.groups ?? [];
+        };
+        ctx.effect(() => ctx.configForms.whileServed([SETTINGS_NS], () => ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
+          name: 'plugins.bundle.config',
+          key: SETTINGS_NS,
+          locale: NS,
+          inject: () => ({ t, scope, loadCatalog }),
+        }, SettingsPage))), 'dsh-code-review: settings page');
       },
     };
   },

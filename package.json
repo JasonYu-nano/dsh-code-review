@@ -1,6 +1,6 @@
 {
   "name": "dsh-code-review",
-  "version": "0.2.5",
+  "version": "0.3.0",
   "private": true,
   "description": "Independent code review of the files the current session changed, graded P0-P3, with per-finding fix/skip decisions sent back to the session.",
   "license": "MIT",
@@ -27,7 +27,7 @@
     "client": {
       "platform": "web",
       "immediately": true,
-      "inject": ["@deepseek-ai/dsh-client-ui-conversation", "@deepseek-ai/dsh-client-locale"]
+      "inject": ["@deepseek-ai/dsh-client-ui-conversation", "@deepseek-ai/dsh-client-locale", "@deepseek-ai/dsh-client-ui-settings", "@deepseek-ai/dsh-client-ui-plugin-manager", "@deepseek-ai/dsh-client-connection"]
     }
   }
 }

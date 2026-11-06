@@ -1,8 +1,9 @@
 # dsh-code-review: independent P0-P3 code review of the session's changed files.
 # config (all optional):
+#   reviewModel: { provider, model, reasoningEffort }   # empty = the calling session's model (editable on the plugin page)
+#   extraPrompt: ''            # appended to the built-in review prompt (editable on the plugin page)
 #   provider: spawn            # fresh in-process subagent; providers that inherit context are rejected
 #   allowShell: false          # true also lets the reviewer use pwsh/bash (shells can modify files)
-#   model: <id>                # reviewer model override (modelProvider / reasoningEffort also optional)
 #   timeoutMs: 1800000
 #   maxDiffChars: 80000
 - insert:
